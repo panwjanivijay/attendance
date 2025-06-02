@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Attendance with Location</title>
+    <script>
+      function getLocationAndRedirect() {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+
+            // Reconstruct the form URL with live location
+            var formURL = "https://docs.google.com/forms/d/e/1FAIpQLSeRoR7R1_Md1L6ddufpALMtKt6eWCCXu33txlUdOogjpXFAPQ/viewform?usp=pp_url"
+              + "&entry.2015471882=Test"
+              + "&entry.1581566799=Test"
+              + "&entry.887011929=Check-In"
+              + "&entry.1642532099=Test"
+              + "&entry.337018603=" + lat + "," + lng;
+
+            window.location.href = formURL;
+          }, function(error) {
+            alert("Error: Please allow location access.");
+          });
+        } else {
+          alert("Geolocation is not supported by this browser.");
+        }
+      }
+    </script>
+  </head>
+  <body onload="getLocationAndRedirect()">
+    <h2 style="text-align:center;">📍 Getting your GPS location... Please wait</h2>
+  </body>
+</html>
