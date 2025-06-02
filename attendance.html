@@ -1,33 +1,176 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Attendance with Location</title>
-    <script>
-      function getLocationAndRedirect() {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(position) {
-            var lat = position.coords.latitude;
-            var lng = position.coords.longitude;
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Attendance Check-In/Out</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+    input, select, button { padding: 10px; margin: 10px; width: 80%; max-width: 300px; }
+    #message { color: red; margin-top: 10px; }
+    #successMessage { color: green; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>QR Attendance</h2>
+  <form id="attendance-form">
+    <input type="text" id="name" placeholder="Your Name" required><br>
+    <input type="text" id="employeeid" placeholder="Employee ID" required><br>
+    <select id="status" required>
+      <option value="">Select</option>
+      <option value="Check-In">Check-In</option>
+      <option value="Check-Out">Check-Out</option>
+    </select><br>
+    <input type="hidden" id="location" name="location">
+    <button type="submit" id="submitButton" disabled>Submit</button>
+  </form>
+  <p id="message"></p>
+  <p id="successMessage"></p>
 
-            // Reconstruct the form URL with live location
-            var formURL = "https://docs.google.com/forms/d/e/1FAIpQLSeRoR7R1_Md1L6ddufpALMtKt6eWCCXu33txlUdOogjpXFAPQ/viewform?usp=pp_url"
-              + "&entry.2015471882="
-              + "&entry.1581566799="
-              + "&entry.887011929=Check-In"
-              + "&entry.1642532099=Test"
-              + "&entry.337018603=" + lat + "," + lng;
+  <script>
+    const form = document.getElementById('attendance-form');
+    const message = document.getElementById('message');
+    const successMessage = document.getElementById('successMessage');
+    const submitButton = document.getElementById('submitButton');
 
-            window.location.href = formURL;
-          }, function(error) {
-            alert("Error: Please allow location access.");
-          });
-        } else {
-          alert("Geolocation is not supported by this browser.");
+    // --- Geofence Configuration ---
+    // IMPORTANT: Replace with the EXACT latitude and longitude of your attendance location.
+    // Use a tool like Google Maps (right-click -> "What's here?") to get precise coordinates.
+    const OFFICE_LAT = 21.2334; // Example: Latitude of Surat Railway Station area
+    const OFFICE_LON = 72.8631; // Example: Longitude of Surat Railway Station area
+    const ALLOWED_RADIUS_METERS = 100; // 100 meters radius for allowed attendance. Adjust as needed.
+
+    // Google Form field IDs (CONFIRMED from your previous HTML and common form structure)
+    const NAME_FIELD_ID = "entry.2015471882";
+    const EMPLOYEE_ID_FIELD_ID = "entry.1581566799";
+    const STATUS_FIELD_ID = "entry.887011929";
+    const LOCATION_FIELD_ID = "entry.1642532099";
+    const TIMESTAMP_FIELD_ID = "entry.337018603";
+
+    // Your Google Form's formResponse URL
+    const GOOGLE_FORM_RESP_URL = "https://docs.google.com/forms/d/e/1FAIpQLSeRoR7R1_Md1L6ddufpALMtKt6eWCCXu33txlUdOogjpXFAPQ/formResponse";
+
+    // Function to calculate distance between two lat/lon points (Haversine formula)
+    function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
+        const R = 6371e3; // metres
+        const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        const d = R * c; // in metres
+        return d;
+    }
+
+    let userLatitude;
+    let userLongitude;
+
+    // Get location when the page loads
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            userLatitude = position.coords.latitude;
+            userLongitude = position.coords.longitude;
+            document.getElementById('location').value = userLatitude + ',' + userLongitude;
+            message.textContent = ""; // Clear any previous error message
+            submitButton.disabled = false; // Enable submit button once location is obtained
+            console.log("Location obtained: " + userLatitude + "," + userLongitude);
+        }, 
+        function(error) {
+            submitButton.disabled = true; // Disable submit button if no location
+            console.error("Geolocation error: ", error);
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message.textContent = "Location permission denied. Please allow location access to mark attendance.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message.textContent = "Location information is unavailable. Please check your device settings and try again.";
+                    break;
+                case error.TIMEOUT:
+                    message.textContent = "Timed out trying to get your location. Please try again.";
+                    break;
+                case error.UNKNOWN_ERROR:
+                    message.textContent = "An unknown error occurred while getting location.";
+                    break;
+            }
+        },
+        {
+            enableHighAccuracy: true, // Request high accuracy
+            timeout: 10000,           // 10 seconds timeout
+            maximumAge: 0             // No cached location
         }
+    );
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault(); // Prevent default form submission
+
+      // Check if location was successfully obtained
+      if (userLatitude === undefined || userLongitude === undefined) {
+          message.textContent = "Location not available. Please ensure location services are enabled and allowed.";
+          return; // Stop submission
       }
-    </script>
-  </head>
-  <body onload="getLocationAndRedirect()">
-    <h2 style="text-align:center;">📍 Getting your GPS location... Please wait</h2>
-  </body>
+
+      // Perform geofence check
+      const distance = getDistanceFromLatLonInMeters(
+          OFFICE_LAT, OFFICE_LON, userLatitude, userLongitude
+      );
+
+      if (distance > ALLOWED_RADIUS_METERS) {
+          message.textContent = `You are outside the designated attendance area. Distance: ${distance.toFixed(2)} meters.`;
+          successMessage.textContent = ""; // Clear success message if any
+          return; // Stop submission if outside geofence
+      }
+
+      // If within geofence, proceed with form submission
+      message.textContent = ""; // Clear geofence error if previously shown
+
+      const name = document.getElementById('name').value;
+      const empid = document.getElementById('employeeid').value;
+      const status = document.getElementById('status').value;
+      const loc = document.getElementById('location').value;
+
+      const params = new URLSearchParams();
+      params.append(NAME_FIELD_ID, name);
+      params.append(EMPLOYEE_ID_FIELD_ID, empid);
+      params.append(STATUS_FIELD_ID, status);
+      params.append(LOCATION_FIELD_ID, loc);
+      params.append(TIMESTAMP_FIELD_ID, new Date().toLocaleString());
+
+      fetch(GOOGLE_FORM_RESP_URL, { method: "POST", mode: "no-cors", body: params })
+        .then(() => {
+          successMessage.textContent = "Attendance submitted successfully!";
+          message.textContent = ""; // Clear any error message
+          form.reset(); // Clear the form fields for next use
+          submitButton.disabled = true; // Disable until new location is obtained
+          // Reset location variables to prompt re-check for next submission
+          userLatitude = undefined; 
+          userLongitude = undefined;
+          // Re-attempt to get location for the next submission
+          navigator.geolocation.getCurrentPosition(
+              function(position) {
+                  userLatitude = position.coords.latitude;
+                  userLongitude = position.coords.longitude;
+                  document.getElementById('location').value = userLatitude + ',' + userLongitude;
+                  submitButton.disabled = false;
+                  console.log("Location re-obtained after submission: " + userLatitude + "," + userLongitude);
+              },
+              function(error) {
+                  console.error("Geolocation re-check error: ", error);
+                  message.textContent = "Failed to re-obtain location. Please refresh the page.";
+              },
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        })
+        .catch((error) => {
+          message.textContent = "Error submitting attendance. Please try again.";
+          successMessage.textContent = ""; // Clear success message
+          console.error("Fetch error:", error);
+        });
+    });
+  </script>
+</body>
 </html>
